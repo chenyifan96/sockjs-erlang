@@ -14,7 +14,7 @@ start_link() ->
 init([]) ->
     {ok, {{simple_one_for_one, 10, 10},
           [{undefined, {sockjs_session, start_link, []},
-            transient, 5000, worker, [sockjs_session]}]}}.
+            temporary, brutal_kill, worker, [sockjs_session]}]}}.
 
 start_child(SessionId, Service, Info) ->
    supervisor:start_child(?MODULE, [SessionId, Service, Info]).
