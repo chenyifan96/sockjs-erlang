@@ -215,6 +215,36 @@ handle_call({reply, Pid, _Multiple}, _From, State = #session{
     {reply, {ok, {open, nil}},
      State1#session{ready_state = open}};
 
+handle_call({reply, Pid, Multiple}, _From, State = #session{
+                                               ready_state = closed,
+                                               response_pid   = RPid,
+                                               heartbeat_tref = HeartbeatTRef,
+                                               outbound_queue = Q,
+                                               close_msg   = CloseMsg})
+    when RPid == undefined orelse RPid == Pid ->
+    case queue:is_empty(Q) of
+        true ->
+            State1 = unmark_waiting(Pid, State),
+            {reply, {close, {close, CloseMsg}}, State1};
+        false ->
+            {Messages, Q1} = case Multiple of
+                                 true  -> {queue:to_list(Q), queue:new()};
+                                 false -> case queue:out(Q) of
+                                              {{value, Msg}, Q2} -> {[Msg], Q2};
+                                              {empty, Q2}        -> {[], Q2}
+                                          end
+                             end,
+            case {Messages, HeartbeatTRef} of
+                {[], triggered} -> State1 = unmark_waiting(Pid, State),
+                    {reply, {ok, {heartbeat, nil}}, State1};
+                {[], _TRef}     -> State1 = mark_waiting(Pid, State),
+                    {reply, wait, State1};
+                _More           -> State1 = unmark_waiting(Pid, State),
+                    {reply, {ok, {data, Messages}},
+                        State1#session{outbound_queue = Q1}}
+            end
+    end;
+
 handle_call({reply, Pid, _Multiple}, _From, State = #session{
                                               ready_state = closed,
                                               close_msg   = CloseMsg}) ->
